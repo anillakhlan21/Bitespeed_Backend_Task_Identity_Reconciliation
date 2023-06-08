@@ -3,44 +3,74 @@ import { Contact } from './models';
 import { Op } from 'sequelize';
 
 export const identifyContact = async (req: Request, res: Response) => {
-    const { email, phoneNumber } = req.body;
-
+    const { email = null, phoneNumber = null } = req.body;
+    let contact, newContactDetail, primaryContact;
     try {
-      //find existingContacts by email and phoneNumber
-      let existingContacts = await Contact.findAll({where: { [Op.or]: [{email},{phoneNumber} ] }})
-      let newContact,primaryContact ;
-      let resContact: {primaryContactId: number, emails: string[], phoneNumbers: string[], secondaryContactIds: number[]};
-      if(existingContacts.length==0){
-        newContact  = await Contact.create({email,phoneNumber});
-      }else{
-         primaryContact = existingContacts.filter((c)=>c.linkedId==null)[0] ?? await Contact.findByPk(existingContacts[0].linkedId)
-         existingContacts =existingContacts.concat(primaryContact)
+        if (!email && !phoneNumber) {
+            return res.status(400).json({ message: "Email or phone number should be provided" })
+        } else if (email && phoneNumber) {
 
-        if(existingContacts.some((c)=> {return c.email===email && c.phoneNumber=== phoneNumber})){
-            resContact = {
-                primaryContactId: primaryContact.id,
-                emails: [...new Set(existingContacts.map((c)=> c.email))],
-                phoneNumbers: [...new Set(existingContacts.map((c)=> c.phoneNumber))],
-            secondaryContactIds: [...new Set(existingContacts.filter((c)=>c.linkPrecedence=='secondary').map((c)=>c.id))]
+            const rowsToUpdate = await Contact.findAll({
+                where: {
+                    [Op.or]: [{ email }, { phoneNumber }],
+                    linkPrecedence: 'primary'
+                },
+                order: [['createdAt', 'ASC']] // Sort by createdAt in ascending order
+            });
+            if (rowsToUpdate.length > 1) {
+                // Find the oldest row among the selected rows
+                const oldestRow = rowsToUpdate.length > 0 ? rowsToUpdate[0] : null;
+
+                // Update linkPrecedence for selected rows
+                for (const row of rowsToUpdate) {
+                    if (row != oldestRow) {
+                        // Mark other rows with the same email and phoneNumber as 'secondary'
+                        await row.update({ linkPrecedence: 'secondary', linkedId: oldestRow.id });
+                    }
+                }
+
+            } else if (rowsToUpdate.length == 0) {
+                await Contact.create({ email, phoneNumber });
             }
-          return res.status(200).json(resContact) 
-        }else{
-        newContact  = await Contact.create({email,phoneNumber, linkPrecedence: 'secondary', linkedId: primaryContact.id});
+
+            contact = await Contact.findOne({ where: { email } });
+            if(!contact){
+                contact =await Contact.findOne({where: {phoneNumber}});
+            }
+            primaryContact = contact.linkPrecedence == 'primary' ? contact : await Contact.findByPk(contact.linkedId)
+            const contactWithSameDetails = await Contact.findOne({ where: { email, phoneNumber } });
+            if (!contactWithSameDetails && rowsToUpdate.length<=1) {
+                await Contact.create({ email, phoneNumber, linkPrecedence: 'secondary', linkedId: primaryContact.id })
+            }
+
+        } else if (email) {
+            contact = await Contact.findOne({ where: { email } });
+            
+            if (!contact) {
+                await Contact.create({ email })
+            }
+            primaryContact = contact.linkPrecedence == 'primary' ? contact : await Contact.findByPk(contact.linkedId)
+        } else if (phoneNumber) {
+            contact = await Contact.findOne({ where: { phoneNumber } })
+            if (!contact) {
+                await Contact.create({ phoneNumber })
+            }
+            primaryContact = contact.linkPrecedence == 'primary' ? contact : await Contact.findByPk(contact.linkedId)
+
         }
-      }
-      let afterSaveExistingContacts = await Contact.findAll({where: { [Op.or]: [{email},{phoneNumber} ] }})
-      primaryContact = afterSaveExistingContacts[afterSaveExistingContacts.findIndex((c)=> c.linkPrecedence: 'primary')]
-      afterSaveExistingContacts =afterSaveExistingContacts.concat(primaryContact)
-      resContact = {
-        emails: [...new Set(afterSaveExistingContacts.map((c)=>c.email)],
-        phoneNumbers: [...new Set(afterSaveExistingContacts.map((c)=> c.phoneNumber)],
-        primaryContactId: primaryContact.id,
-        secondaryContactIds: [...new Set(afterSaveExistingContacts.filter((c)=>c.linkPrecedence=='secondary').map((c)=>c.id))]
-      }
-      
-      res.status(200).json(resContact)
+        const secondaryContacts = await Contact.findAll({ where: { linkedId: primaryContact.id } })
+        const emails = [...new Set([primaryContact].concat(secondaryContacts.filter(c => c.email != null)).map((c) => c.email))]
+        const phoneNumbers = [...new Set([primaryContact].concat(secondaryContacts.filter(c => c.phoneNumber != null)).map((c) => c.phoneNumber))]
+        const secondaryContactIds = [...new Set(secondaryContacts.map((c) => c.id))]
+        const result = {
+            contact: { primaryContatctId: primaryContact.id, emails, phoneNumbers, secondaryContactIds }
+        }
+
+
+        res.status(200).json(result)
     } catch (error) {
         console.error(error);
         return res.status(500).json({ error: 'Internal server error' });
     }
 };
+
