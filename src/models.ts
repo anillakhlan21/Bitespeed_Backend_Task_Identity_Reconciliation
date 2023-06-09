@@ -3,7 +3,7 @@ import { dbConfig } from './config';
 
 const sequelize = new Sequelize(dbConfig.database, dbConfig.username, dbConfig.password, {
   host: dbConfig.host,
-  port: dbConfig.port,
+  port: +dbConfig.port,
   dialect: 'mysql',
 });
 

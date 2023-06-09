@@ -5,7 +5,7 @@ const sequelize_1 = require("sequelize");
 const config_1 = require("./config");
 const sequelize = new sequelize_1.Sequelize(config_1.dbConfig.database, config_1.dbConfig.username, config_1.dbConfig.password, {
     host: config_1.dbConfig.host,
-    port: config_1.dbConfig.port,
+    port: +config_1.dbConfig.port,
     dialect: 'mysql',
 });
 exports.Contact = sequelize.define('Contact', {
