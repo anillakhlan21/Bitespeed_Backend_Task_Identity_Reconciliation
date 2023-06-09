@@ -19,7 +19,7 @@ export const identifyContact = async (req: Request, res: Response) => {
             });
             if (rowsToUpdate.length > 1) {
                 // Find the oldest row among the selected rows
-                const oldestRow = rowsToUpdate.length > 0 ? rowsToUpdate[0] : null;
+                const oldestRow: any = rowsToUpdate.length > 0 ? rowsToUpdate[0] : null;
 
                 // Update linkPrecedence for selected rows
                 for (const row of rowsToUpdate) {
@@ -58,7 +58,7 @@ export const identifyContact = async (req: Request, res: Response) => {
             primaryContact = contact.linkPrecedence == 'primary' ? contact : await Contact.findByPk(contact.linkedId)
 
         }
-        const secondaryContacts = await Contact.findAll({ where: { linkedId: primaryContact.id } })
+        const secondaryContacts:any = await Contact.findAll({ where: { linkedId: primaryContact.id } })
         const emails = [...new Set([primaryContact].concat(secondaryContacts.filter(c => c.email != null)).map((c) => c.email))]
         const phoneNumbers = [...new Set([primaryContact].concat(secondaryContacts.filter(c => c.phoneNumber != null)).map((c) => c.phoneNumber))]
         const secondaryContactIds = [...new Set(secondaryContacts.map((c) => c.id))]
